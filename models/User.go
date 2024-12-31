@@ -5,6 +5,14 @@ import (
 	"gorm.io/gorm"
 )
 
+type MembershipTier string
+
+const (
+	FreeTier    MembershipTier = "Free"
+	PremiumTier MembershipTier = "Premium"
+	ProTier     MembershipTier = "Pro"
+)
+
 type User struct {
 	gorm.Model
 	FirstName           string         `json:"firstName"`
@@ -17,4 +25,6 @@ type User struct {
 	SavedProperties     datatypes.JSON `json:"savedProperties"`
 	PushTokens          datatypes.JSON `json:"pushTokens"`
 	AllowsNotifications *bool          `json:"allowsNotifications"`
+	MembershipTier      MembershipTier `json:"membershipTier" gorm:"type:membership_tier;default:'Free'"`
+	Avatar              string         `json:"avatar"` // Ensure this field is included
 }

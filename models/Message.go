@@ -5,9 +5,10 @@ import (
 )
 
 type Message struct {
-	gorm.Model
-	ConversationID uint
-	SenderID       uint   `json:"senderID"`
-	ReceiverID     uint   `json:"receiverID"`
-	Text           string `json:"text"`
+    gorm.Model
+    ConversationID uint
+    SenderID       uint   `json:"senderID"`
+    ReceiverID     uint   `json:"receiverID"`
+    Text           string `json:"text"`
+    Read           bool   `json:"read"`
 }

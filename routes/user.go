@@ -47,11 +47,14 @@ func Register(ctx iris.Context) {
 	}
 
 	newUser = models.User{
-		FirstName:   userInput.FirstName,
-		LastName:    userInput.LastName,
-		Email:       strings.ToLower(userInput.Email),
-		Password:    hashedPassword,
-		SocialLogin: false}
+		FirstName:      userInput.FirstName,
+		LastName:       userInput.LastName,
+		Email:          strings.ToLower(userInput.Email),
+		Password:       hashedPassword,
+		SocialLogin:    false,
+		MembershipTier: models.FreeTier,
+		Avatar:         "https://static.vecteezy.com/system/resources/previews/013/485/975/original/letter-k-comic-style-typeface-with-transparent-background-file-png.png", // Set a default avatar or handle it accordingly
+	}
 
 	storage.DB.Create(&newUser)
 
@@ -302,7 +305,7 @@ func ForgotPassword(ctx iris.Context) {
 			return
 		}
 
-		link := "exp://192.168.30.24:19000/--/resetpassword/"
+		link := "exp://192.168.100.3:19000/--/resetpassword/"
 		token, tokenErr := utils.CreateForgotPasswordToken(user.ID, user.Email)
 
 		if tokenErr != nil {
@@ -579,6 +582,38 @@ func AllowsNotifications(ctx iris.Context) {
 	ctx.StatusCode(iris.StatusNoContent)
 }
 
+
+func GetUserOwnedProperties(ctx iris.Context) {
+	userID := ctx.Values().Get("userID").(uint)
+
+	var properties []models.Property
+	if err := storage.DB.Where("user_id = ?", userID).Find(&properties).Error; err != nil {
+		ctx.StatusCode(http.StatusInternalServerError)
+		ctx.JSON(iris.Map{"error": "Failed to retrieve properties"})
+		return
+	}
+
+	ctx.JSON(properties)
+}
+
+func GetPropertyReservations(ctx iris.Context) {
+	propertyID := ctx.Params().GetUintDefault("propertyId", 0)
+	if propertyID == 0 {
+		ctx.StatusCode(http.StatusBadRequest)
+		ctx.JSON(iris.Map{"error": "Invalid property ID"})
+		return
+	}
+
+	var reservations []models.Reservation
+	if err := storage.DB.Where("property_id = ?", propertyID).Preload("User").Find(&reservations).Error; err != nil {
+		ctx.StatusCode(http.StatusInternalServerError)
+		ctx.JSON(iris.Map{"error": "Failed to retrieve reservations for this property"})
+		return
+	}
+
+	ctx.JSON(reservations)
+}
+
 func getAndHandleUserExists(user *models.User, email string) (exists bool, err error) {
 	userExistsQuery := storage.DB.Where("email = ?", strings.ToLower(email)).Limit(1).Find(&user)
 
@@ -637,8 +672,9 @@ func returnUser(user models.User, ctx iris.Context) {
 		"allowsNotifications": user.AllowsNotifications,
 		"accessToken":         string(tokenPair.AccessToken),
 		"refreshToken":        string(tokenPair.RefreshToken),
+		"membershipTier":      user.MembershipTier,
+		"avatar":              user.Avatar, // Ensure this is included
 	})
-
 }
 
 type RegisterUserInput struct {
@@ -695,4 +731,176 @@ type AlterPushTokenInput struct {
 
 type AllowsNotificationsInput struct {
 	AllowsNotifications *bool `json:"allowsNotifications" validate:"required"`
+}
+
+
+// Add these functions to routes/user.go
+
+func GetUserReservations(ctx iris.Context) {
+    claims := utils.GetUserFromToken(ctx)
+    if claims == nil {
+        utils.CreateError(iris.StatusUnauthorized, "Authentication Error", "Invalid or expired token", ctx)
+        return
+    }
+
+    var reservations []models.Reservation
+    
+    // Fetch both reservations made by the user and reservations for their properties
+    if err := storage.DB.Where(
+        "(user_id = ? OR owner_id = ?)", 
+        claims.ID, 
+        claims.ID,
+    ).Preload("Property").Preload("User").Find(&reservations).Error; err != nil {
+        utils.CreateError(iris.StatusInternalServerError, "Database Error", "Failed to fetch reservations", ctx)
+        return
+    }
+
+    // Separate reservations into guest and host categories
+    response := struct {
+        AsGuest []models.Reservation `json:"asGuest"`
+        AsHost  []models.Reservation `json:"asHost"`
+    }{
+        AsGuest: make([]models.Reservation, 0),
+        AsHost:  make([]models.Reservation, 0),
+    }
+
+    for _, reservation := range reservations {
+        if reservation.UserID == claims.ID {
+            response.AsGuest = append(response.AsGuest, reservation)
+        } else {
+            response.AsHost = append(response.AsHost, reservation)
+        }
+    }
+
+    ctx.JSON(response)
+}
+
+// func HandleReservation(ctx iris.Context) {
+//     claims := utils.GetUserFromToken(ctx)
+//     if claims == nil {
+//         utils.CreateError(iris.StatusUnauthorized, "Authentication Error", "Invalid or expired token", ctx)
+//         return
+//     }
+
+//     reservationID := ctx.Params().GetUintDefault("id", 0)
+//     if reservationID == 0 {
+//         utils.CreateError(iris.StatusBadRequest, "Invalid Input", "Invalid reservation ID", ctx)
+//         return
+//     }
+
+//     var input struct {
+//         Action string `json:"action" validate:"required,oneof=accept reject cancel"`
+//     }
+//     if err := ctx.ReadJSON(&input); err != nil {
+//         utils.HandleValidationErrors(err, ctx)
+//         return
+//     }
+
+//     var reservation models.Reservation
+//     if err := storage.DB.Preload("Property").First(&reservation, reservationID).Error; err != nil {
+//         utils.CreateError(iris.StatusNotFound, "Not Found", "Reservation not found", ctx)
+//         return
+//     }
+
+//     // Verify user has permission to modify this reservation
+//     if reservation.Property.UserID != claims.ID && reservation.UserID != claims.ID {
+//         utils.CreateError(iris.StatusForbidden, "Forbidden", "Not authorized to modify this reservation", ctx)
+//         return
+//     }
+
+//     // Handle different actions
+//     switch input.Action {
+//     case "accept":
+//         if reservation.Property.UserID != claims.ID {
+//             utils.CreateError(iris.StatusForbidden, "Forbidden", "Only property owner can accept reservations", ctx)
+//             return
+//         }
+//         reservation.Status = models.Accepted
+//     case "reject":
+//         if reservation.Property.UserID != claims.ID {
+//             utils.CreateError(iris.StatusForbidden, "Forbidden", "Only property owner can reject reservations", ctx)
+//             return
+//         }
+//         reservation.Status = models.Rejected
+//     case "cancel":
+//         if reservation.Status == models.Accepted {
+//             utils.CreateError(iris.StatusBadRequest, "Invalid Action", "Cannot cancel accepted reservation", ctx)
+//             return
+//         }
+//         reservation.Status = models.Cancelled
+//     }
+
+//     if err := storage.DB.Save(&reservation).Error; err != nil {
+//         utils.CreateError(iris.StatusInternalServerError, "Database Error", "Failed to update reservation", ctx)
+//         return
+//     }
+
+//     ctx.JSON(reservation)
+// }
+
+// In routes/user.go
+// routes/reservation.go
+
+func HandleReservation(ctx iris.Context) {
+    claims := utils.GetUserFromToken(ctx)
+    if claims == nil {
+        utils.CreateError(iris.StatusUnauthorized, "Authentication Error", "Invalid or expired token", ctx)
+        return
+    }
+
+    reservationID := ctx.Params().GetUintDefault("id", 0)
+    if reservationID == 0 {
+        utils.CreateError(iris.StatusBadRequest, "Invalid Input", "Invalid reservation ID", ctx)
+        return
+    }
+
+    var input struct {
+        Action string `json:"action" validate:"required,oneof=accept reject cancel"`
+    }
+    if err := ctx.ReadJSON(&input); err != nil {
+        utils.HandleValidationErrors(err, ctx)
+        return
+    }
+
+    var reservation models.Reservation
+    if err := storage.DB.Preload("Property").First(&reservation, reservationID).Error; err != nil {
+        utils.CreateError(iris.StatusNotFound, "Not Found", "Reservation not found", ctx)
+        return
+    }
+
+    // Verify permissions based on action
+    switch input.Action {
+    case "accept", "reject":
+        if reservation.Property.UserID != claims.ID {
+            utils.CreateError(iris.StatusForbidden, "Forbidden", "Only property owner can accept/reject reservations", ctx)
+            return
+        }
+    case "cancel":
+        if reservation.UserID != claims.ID {
+            utils.CreateError(iris.StatusForbidden, "Forbidden", "Only the guest can cancel their reservation", ctx)
+            return
+        }
+        // Don't allow cancellation of already accepted reservations
+        if reservation.Status == models.Accepted {
+            utils.CreateError(iris.StatusBadRequest, "Invalid Action", "Cannot cancel an accepted reservation", ctx)
+            return
+        }
+    }
+
+    // Update reservation status
+    switch input.Action {
+    case "accept":
+        reservation.Status = models.Accepted
+    case "reject":
+        reservation.Status = models.Rejected
+    case "cancel":
+        reservation.Status = models.Cancelled
+    }
+
+    if err := storage.DB.Save(&reservation).Error; err != nil {
+        utils.CreateError(iris.StatusInternalServerError, "Database Error", "Failed to update reservation", ctx)
+        return
+    }
+
+    ctx.JSON(reservation)
 }

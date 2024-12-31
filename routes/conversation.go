@@ -170,6 +170,19 @@ func getConversationResult(id string, ctx iris.Context) (ConversationResult, err
 	return result, nil
 }
 
+
+func GetUnreadMessageCount(ctx iris.Context) {
+    params := ctx.Params()
+    conversationID := params.Get("id")
+
+    var unreadCount int64
+    storage.DB.Model(&models.Message{}).Where("conversation_id = ? AND read = ?", conversationID, false).Count(&unreadCount)
+
+    ctx.JSON(map[string]int64{
+        "unreadCount": unreadCount,
+    })
+}
+
 func getConversationResultsByUserID(id string, ctx iris.Context) ([]ConversationResult, error) {
 	var result []ConversationResult
 	resultQuery := storage.DB.Table("conversations").

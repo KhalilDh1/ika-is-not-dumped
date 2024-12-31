@@ -272,146 +272,142 @@ func DeleteProperty(ctx iris.Context) {
 // 	ctx.StatusCode(iris.StatusNoContent)
 // }
 
-
-
-
 // ... (other functions)
 
 func UpdateProperty(ctx iris.Context) {
-    params := ctx.Params()
-    id := params.Get("id")
+	params := ctx.Params()
+	id := params.Get("id")
 
-    property := GetPropertyAndAssociationsByPropertyID(id, ctx)
-    if property == nil {
-        return
-    }
+	property := GetPropertyAndAssociationsByPropertyID(id, ctx)
+	if property == nil {
+		return
+	}
 
-    claims := jwt.Get(ctx).(*utils.AccessToken)
+	claims := jwt.Get(ctx).(*utils.AccessToken)
 
-    if property.UserID != claims.ID {
-        ctx.StatusCode(iris.StatusForbidden)
-        return
-    }
+	if property.UserID != claims.ID {
+		ctx.StatusCode(iris.StatusForbidden)
+		return
+	}
 
-    var propertyInput UpdatePropertyInput
-    err := ctx.ReadJSON(&propertyInput)
-    if err != nil {
-        utils.HandleValidationErrors(err, ctx)
-        return
-    }
+	var propertyInput UpdatePropertyInput
+	err := ctx.ReadJSON(&propertyInput)
+	if err != nil {
+		utils.HandleValidationErrors(err, ctx)
+		return
+	}
 
-    var newApartments []models.Apartment
-    var newApartmentImages []*[]string
-    bedroomLow := property.BedroomLow
-    bedroomHigh := property.BedroomHigh
-    var bathroomLow float32 = property.BathroomLow
-    var bathroomHigh float32 = property.BathroomHigh
-    var rentLow float32 = propertyInput.Apartments[0].Rent
-    var rentHigh float32 = propertyInput.Apartments[0].Rent
+	var newApartments []models.Apartment
+	var newApartmentImages []*[]string
+	bedroomLow := property.BedroomLow
+	bedroomHigh := property.BedroomHigh
+	var bathroomLow float32 = property.BathroomLow
+	var bathroomHigh float32 = property.BathroomHigh
+	var rentLow float32 = propertyInput.Apartments[0].Rent
+	var rentHigh float32 = propertyInput.Apartments[0].Rent
 
-    for _, apartment := range propertyInput.Apartments {
-        if apartment.Bathrooms < bathroomLow {
-            bathroomLow = apartment.Bathrooms
-        }
-        if apartment.Bathrooms > bathroomHigh {
-            bathroomHigh = apartment.Bathrooms
-        }
-        if *apartment.Bedrooms < bedroomLow {
-            bedroomLow = *apartment.Bedrooms
-        }
-        if *apartment.Bedrooms > bedroomHigh {
-            bedroomHigh = *apartment.Bedrooms
-        }
-        if apartment.Rent < rentLow {
-            rentLow = apartment.Rent
-        }
-        if apartment.Rent > rentHigh {
-            rentHigh = apartment.Rent
-        }
-		
-        amenities, _ := json.Marshal(apartment.Amenities)
+	for _, apartment := range propertyInput.Apartments {
+		if apartment.Bathrooms < bathroomLow {
+			bathroomLow = apartment.Bathrooms
+		}
+		if apartment.Bathrooms > bathroomHigh {
+			bathroomHigh = apartment.Bathrooms
+		}
+		if *apartment.Bedrooms < bedroomLow {
+			bedroomLow = *apartment.Bedrooms
+		}
+		if *apartment.Bedrooms > bedroomHigh {
+			bedroomHigh = *apartment.Bedrooms
+		}
+		if apartment.Rent < rentLow {
+			rentLow = apartment.Rent
+		}
+		if apartment.Rent > rentHigh {
+			rentHigh = apartment.Rent
+		}
 
-        currApartment := models.Apartment{
-            Unit:        apartment.Unit,
-            Bedrooms:    *apartment.Bedrooms,
-            Bathrooms:   apartment.Bathrooms,
-            PropertyID:  property.ID,
-            SqFt:        apartment.SqFt,
-            Rent:        apartment.Rent,
-            Deposit:     *apartment.Deposit,
-            LeaseLength: apartment.LeaseLength,
-            AvailableOn: apartment.AvailableOn,
-            Active:      apartment.Active,
-            Amenities:   amenities,
-            Description: apartment.Description,
-        }
+		amenities, _ := json.Marshal(apartment.Amenities)
 
-        if apartment.ID != nil {
-            currApartment.ID = *apartment.ID
-            updateApartmentAndImages(currApartment, apartment.Images, storage.Cld)
-        } else {
-            newApartments = append(newApartments, currApartment)
-            newApartmentImages = append(newApartmentImages, &apartment.Images)
-        }
-    }
+		currApartment := models.Apartment{
+			Unit:        apartment.Unit,
+			Bedrooms:    *apartment.Bedrooms,
+			Bathrooms:   apartment.Bathrooms,
+			PropertyID:  property.ID,
+			SqFt:        apartment.SqFt,
+			Rent:        apartment.Rent,
+			Deposit:     *apartment.Deposit,
+			LeaseLength: apartment.LeaseLength,
+			AvailableOn: apartment.AvailableOn,
+			Active:      apartment.Active,
+			Amenities:   amenities,
+			Description: apartment.Description,
+		}
 
-    storage.DB.Create(&newApartments)
+		if apartment.ID != nil {
+			currApartment.ID = *apartment.ID
+			updateApartmentAndImages(currApartment, apartment.Images, storage.Cld)
+		} else {
+			newApartments = append(newApartments, currApartment)
+			newApartmentImages = append(newApartmentImages, &apartment.Images)
+		}
+	}
 
-    for index, apartment := range newApartments {
-        if len(*newApartmentImages[index]) > 0 {
-            updateApartmentAndImages(apartment, *newApartmentImages[index], storage.Cld)
-        }
-    }
+	storage.DB.Create(&newApartments)
 
-    propertyAmenities, _ := json.Marshal(propertyInput.Amenities)
-    includedUtilities, _ := json.Marshal(propertyInput.IncludedUtilities)
+	for index, apartment := range newApartments {
+		if len(*newApartmentImages[index]) > 0 {
+			updateApartmentAndImages(apartment, *newApartmentImages[index], storage.Cld)
+		}
+	}
 
-    property.UnitType = propertyInput.UnitType
-    property.Description = propertyInput.Description
-    property.IncludedUtilities = includedUtilities
-    property.PetsAllowed = propertyInput.PetsAllowed
-    property.LaundryType = propertyInput.LaundryType
-    property.ParkingFee = *propertyInput.ParkingFee
-    property.Amenities = propertyAmenities
-    property.Name = propertyInput.Name
-    property.FirstName = propertyInput.FirstName
-    property.LastName = propertyInput.LastName
-    property.Email = propertyInput.Email
-    property.CallingCode = propertyInput.CallingCode
-    property.CountryCode = propertyInput.CountryCode
-    property.PhoneNumber = propertyInput.PhoneNumber
-    property.Website = propertyInput.Website
-    property.OnMarket = propertyInput.OnMarket
-    property.BathroomHigh = bathroomHigh
-    property.BathroomLow = bathroomLow
-    property.BedroomLow = bedroomLow
-    property.BedroomHigh = bedroomHigh
-    property.RentLow = rentLow
-    property.RentHigh = rentHigh
+	propertyAmenities, _ := json.Marshal(propertyInput.Amenities)
+	includedUtilities, _ := json.Marshal(propertyInput.IncludedUtilities)
 
-    imagesArr := insertImages(InsertImages{
-        images:     propertyInput.Images,
-        propertyID: strconv.FormatUint(uint64(property.ID), 10),
-    }, storage.Cld)
+	property.UnitType = propertyInput.UnitType
+	property.Description = propertyInput.Description
+	property.IncludedUtilities = includedUtilities
+	property.PetsAllowed = propertyInput.PetsAllowed
+	property.LaundryType = propertyInput.LaundryType
+	property.ParkingFee = *propertyInput.ParkingFee
+	property.Amenities = propertyAmenities
+	property.Name = propertyInput.Name
+	property.FirstName = propertyInput.FirstName
+	property.LastName = propertyInput.LastName
+	property.Email = propertyInput.Email
+	property.CallingCode = propertyInput.CallingCode
+	property.CountryCode = propertyInput.CountryCode
+	property.PhoneNumber = propertyInput.PhoneNumber
+	property.Website = propertyInput.Website
+	property.OnMarket = propertyInput.OnMarket
+	property.BathroomHigh = bathroomHigh
+	property.BathroomLow = bathroomLow
+	property.BedroomLow = bedroomLow
+	property.BedroomHigh = bedroomHigh
+	property.RentLow = rentLow
+	property.RentHigh = rentHigh
 
-    jsonImgs, _ := json.Marshal(imagesArr)
+	imagesArr := insertImages(InsertImages{
+		images:     propertyInput.Images,
+		propertyID: strconv.FormatUint(uint64(property.ID), 10),
+	}, storage.Cld)
 
-    property.Images = jsonImgs
+	jsonImgs, _ := json.Marshal(imagesArr)
 
-    rowsUpdated := storage.DB.Model(&property).Updates(property)
+	property.Images = jsonImgs
 
-    if rowsUpdated.Error != nil {
-        utils.CreateError(
-            iris.StatusInternalServerError,
-            "Error", rowsUpdated.Error.Error(), ctx)
-        return
-    }
+	rowsUpdated := storage.DB.Model(&property).Updates(property)
 
-    ctx.StatusCode(iris.StatusNoContent)
+	if rowsUpdated.Error != nil {
+		utils.CreateError(
+			iris.StatusInternalServerError,
+			"Error", rowsUpdated.Error.Error(), ctx)
+		return
+	}
+
+	ctx.StatusCode(iris.StatusNoContent)
 }
 
 // ... (other functions)
-
 
 func GetPropertyAndAssociationsByPropertyID(id string, ctx iris.Context) *models.Property {
 
@@ -449,50 +445,50 @@ func GetPropertiesByBoundingBox(ctx iris.Context) {
 }
 
 func insertImages(arg InsertImages, cld *cloudinary.Cloudinary) []string {
-    var imagesArr []string
-    for _, image := range arg.images {
-        if !strings.Contains(image, "dts5snzf6") { // Replace with your Cloudinary cloud name
-            imageID := randstr.Hex(16)
-            imageStr := "property/" + arg.propertyID
-            if arg.apartmentID != nil {
-                imageStr += "/apartment/" + *arg.apartmentID
-            }
-            imageStr += "/" + imageID
+	var imagesArr []string
+	for _, image := range arg.images {
+		if !strings.Contains(image, "dts5snzf6") { // Replace with your Cloudinary cloud name
+			imageID := randstr.Hex(16)
+			imageStr := "property/" + arg.propertyID
+			if arg.apartmentID != nil {
+				imageStr += "/apartment/" + *arg.apartmentID
+			}
+			imageStr += "/" + imageID
 
-            // Upload image to Cloudinary
-            result, err := cld.Upload.Upload(context.Background(), image, uploader.UploadParams{
-                Folder: imageStr,
-            })
-            if err != nil {
-                // utils.CreateError(
-                //     iris.StatusInternalServerError,
-                //     "Error", "Failed to upload image to Cloudinary", ctx)
-                return nil
-            }
+			// Upload image to Cloudinary
+			result, err := cld.Upload.Upload(context.Background(), image, uploader.UploadParams{
+				Folder: imageStr,
+			})
+			if err != nil {
+				// utils.CreateError(
+				//     iris.StatusInternalServerError,
+				//     "Error", "Failed to upload image to Cloudinary", ctx)
+				return nil
+			}
 
-            imagesArr = append(imagesArr, result.SecureURL)
-        } else {
-            imagesArr = append(imagesArr, image)
-        }
-    }
-    return imagesArr
+			imagesArr = append(imagesArr, result.SecureURL)
+		} else {
+			imagesArr = append(imagesArr, image)
+		}
+	}
+	return imagesArr
 }
 
 func updateApartmentAndImages(apartment models.Apartment, images []string, cld *cloudinary.Cloudinary) {
-    apartmentID := strconv.FormatUint(uint64(apartment.ID), 10)
+	apartmentID := strconv.FormatUint(uint64(apartment.ID), 10)
 
-    apartmentImages := insertImages(InsertImages{
-        images:      images,
-        propertyID:  strconv.FormatUint(uint64(apartment.PropertyID), 10),
-        apartmentID: &apartmentID,
-    }, cld)
+	apartmentImages := insertImages(InsertImages{
+		images:      images,
+		propertyID:  strconv.FormatUint(uint64(apartment.PropertyID), 10),
+		apartmentID: &apartmentID,
+	}, cld)
 
-    if len(apartmentImages) > 0 {
-        images, _ := json.Marshal(apartmentImages)
-        apartment.Images = images
-    }
+	if len(apartmentImages) > 0 {
+		images, _ := json.Marshal(apartmentImages)
+		apartment.Images = images
+	}
 
-    storage.DB.Model(&apartment).Updates(apartment)
+	storage.DB.Model(&apartment).Updates(apartment)
 }
 
 type InsertImages struct {
