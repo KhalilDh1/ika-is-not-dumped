@@ -2,13 +2,14 @@ module apartments-clone-server
 
 go 1.23
 
-toolchain go1.23.1
+// toolchain go1.23.1
 
 require (
 	github.com/cloudinary/cloudinary-go/v2 v2.9.0
 	github.com/joho/godotenv v1.5.1
 	github.com/kataras/iris/v12 v12.2.11
 	github.com/oliveroneill/exponent-server-sdk-golang v0.0.0-20210823140141-d050598be512
+	github.com/stripe/stripe-go v70.15.0+incompatible
 	github.com/thanhpk/randstr v1.0.6
 	golang.org/x/exp v0.0.0-20241004190924-225e2abe05e6
 	gorm.io/driver/postgres v1.5.9
@@ -30,7 +31,6 @@ require (
 	github.com/kataras/jwt v0.1.12 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
-	github.com/stripe/stripe-go v70.15.0+incompatible // indirect
 	github.com/tdewolff/parse/v2 v2.7.12 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
@@ -44,7 +44,6 @@ require (
 	github.com/Shopify/goreferrer v0.0.0-20240724165105-aceaa0259138 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/flosch/pongo2/v4 v4.0.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

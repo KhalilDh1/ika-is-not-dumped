@@ -305,7 +305,7 @@ func ForgotPassword(ctx iris.Context) {
 			return
 		}
 
-		link := "exp://http://ika-is-not-dumped-production.up.railway.app:4000:19000/--/resetpassword/"
+		link := "exp://http://192.168.100.3:19000/--/resetpassword/"
 		token, tokenErr := utils.CreateForgotPasswordToken(user.ID, user.Email)
 
 		if tokenErr != nil {
