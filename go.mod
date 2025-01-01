@@ -2,7 +2,7 @@ module apartments-clone-server
 
 go 1.23
 
-// toolchain go1.23.1
+toolchain go1.23.1
 
 require (
 	github.com/cloudinary/cloudinary-go/v2 v2.9.0
